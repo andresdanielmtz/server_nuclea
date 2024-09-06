@@ -15,6 +15,14 @@ class SecurityModel(ap.Model):
 
         for idx, camera in enumerate(self.cameras):
             camera.id = idx
+        self.channel = {
+            "subject": "camera",
+            "content": "intruder",
+        }
+        self.guard_orders = {
+            "x": None,
+            "y": None,
+        }
 
     def step(self):
         self.guard.step()
@@ -136,6 +144,15 @@ class Camera(ap.Agent):
         self.id = None
         self.detection = None
         self.locked = False
+        self.test = ""
+
+    def see(self):
+        channel = self.model.channel  # Get the channel
+        for val in channel.values():
+            if val == "intruder":
+                self.test = "YES"
+            else:
+                self.test = "NO"
 
     def lock_in(self):
         self.locked = True
@@ -162,11 +179,12 @@ class Camera(ap.Agent):
                     action()
 
     def step(self):
+        self.see()
         self.next()
 
     def give_info(self):
         return jsonify(
-            {"id": self.id, "detection": self.detection, "locked": self.locked}
+            {"id": self.id, "test": self.model.channel, "locked": self.locked}
         )
 
 
