@@ -1,6 +1,5 @@
 from flask import Flask, request, jsonify
 from agents import SecurityModel
-import agentpy as ap
 from util.camera import process_image
 
 
@@ -10,6 +9,28 @@ app = Flask(__name__)
 @app.route("/")
 def home():
     return "Hello \t Welcome to the Drone Security System!"
+
+
+@app.route("/set_channel", methods=["POST"])
+def set_channel():
+    subject = request.json.get("subject")
+    if not isinstance(subject, list):
+        return jsonify({"error": "Invalid 'subject' type, expected a list"}), 400
+    
+    content = request.json.get("content")
+    if not subject or not content:
+        return jsonify({"error": "Missing 'subject' or 'content' in request body"}), 400
+    model.channel = {"subject": subject, "content": content}
+    
+    
+    
+    return jsonify(model.channel)
+
+
+@app.route("/clean_channel", methods=["GET"])
+def clean_channel():
+    model.channel = {}
+    return jsonify(model.channel)
 
 
 @app.route("/vision", methods=["POST"])
@@ -55,6 +76,7 @@ def agents_info():
 
     model.step()
     return {
+        "channel": model.channel,
         "guard": guard_info,
         "cameras": cameras_info,
         "drone": drone_info,
