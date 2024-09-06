@@ -2,7 +2,7 @@
 ## Modelación de Sistemas Multiagentes 
 
 ### To - Do Server (Agent.py) 
-- Broadcast de Dron a Guardia y de Cámara a Guardia a través de función en Model 
+- ~~Broadcast de Dron a Guardia y de Cámara a Guardia a través de función en Model ~~
 - Definir lógica del Dron en cuanto a su posición y manejo a través de el guardia.
 - Definir endpoints de backend.
     - Definir ruta de visión y manejo junto con la simulación. 

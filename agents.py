@@ -120,6 +120,7 @@ class Guard(ap.Agent):
         self.call_the_cops = True
         return
 
+
     def rule_final_alert(self, act):
         return self.alarmCount_end > 0 and act == self.final_alert
 
@@ -174,6 +175,9 @@ class Camera(ap.Agent):
                 if content == "intruder begin":
                     self.increase_alert_checks() 
         return
+
+    def update_vision_result(self, result):
+        self.detection = result
 
     def increase_alert_checks(self):
         self.alert_checks += 1

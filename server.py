@@ -54,18 +54,13 @@ def vision_result():
         )
 
     if agent_type == "drone":
-        if not agent_id:
-            return jsonify({"error": "Missing 'id' for drone agent"}), 400
-        model.drone[int(agent_id)].update_vision_result(result)
-        subject = ["drone", agent_id]
+        model.drone[0].update_vision_result(result) 
+        subject = "drone"
     elif agent_type == "camera":
         if not agent_id:
             return jsonify({"error": "Missing 'id' for camera agent"}), 400
         model.cameras[agent_id].update_vision_result(result)
-        subject = ["camera", agent_id]
-    elif agent_type == "guard":
-        model.guard[0].update_vision_result(result)
-        subject = ["guard"]
+        subject = "camera"
     else:
         return jsonify({"error": "Invalid agent_type"}), 400
 
