@@ -1,4 +1,5 @@
-from flask import Blueprint, request, jsonify
+import traceback
+from flask import jsonify
 import os
 import requests
 from dotenv import load_dotenv
@@ -10,7 +11,7 @@ api_key = os.getenv("OPENAI_API_KEY")
 print(api_key)
 headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
-def process_image(id: str = "[Not an ID]", image_data: str = "[No Image Data]") -> jsonify:
+def process_image(image_data: str = "[No Image Data]") -> jsonify:
     try:
         if not image_data or image_data == "[No Image Data]":
             return jsonify({"error": "No image data provided"}), 400

@@ -32,13 +32,12 @@ def clean_channel():
 
 @app.route("/vision", methods=["POST"])
 def vision():
-    req_id = request.json.get("id")
     image_data = request.json.get("image")
 
-    if not req_id or not image_data:
+    if not image_data:
         return jsonify({"error": "Missing 'id' or 'image' in request body"}), 400
 
-    return process_image(req_id, image_data)
+    return process_image(image_data)
 
 
 @app.route("/vision_result", methods=["POST"])
