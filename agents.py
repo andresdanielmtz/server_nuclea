@@ -16,7 +16,7 @@ class SecurityModel(ap.Model):
         for idx, camera in enumerate(self.cameras):
             camera.id = idx
         self.channel = {
-            "subject": "camera",
+            "subject": "camera",  # TODO: Change to arr
             "content": "intruder",
         }
         self.guard_orders = {
@@ -154,11 +154,18 @@ class Camera(ap.Agent):
             else:
                 self.test = "NO"
 
+    def increase_alert_checks(self):
+        self.alert_checks += 1
+
     def lock_in(self):
         self.locked = True
 
     def rule_lock_in(self, act):
-        return self.locked == False and self.detection == "YES" and act == self.lock_in
+        return (
+            self.locked == False
+            and (self.detection == "YES" or self.alert_checks > 0)
+            and act == self.lock_in
+        )
 
     def alert_guard(self):
         SecurityModel.guard[0].increase_alarm_count_begin()
@@ -184,7 +191,12 @@ class Camera(ap.Agent):
 
     def give_info(self):
         return jsonify(
-            {"id": self.id, "test": self.model.channel, "locked": self.locked}
+            {
+                "id": self.id,
+                "test": self.model.channel,
+                "locked": self.locked,
+                "alert_checks": self.alert_checks,
+            }
         )
 
 

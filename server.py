@@ -1,14 +1,10 @@
 from flask import Flask, request, jsonify
-from simulation import simulation
-from vision.vision import image_processing_bp
 from agents import SecurityModel
 import agentpy as ap
 from util.camera import process_image
 
 
 app = Flask(__name__)
-app.register_blueprint(simulation, url_prefix="/sim")
-app.register_blueprint(image_processing_bp, url_prefix="/image")
 
 
 @app.route("/")
@@ -20,11 +16,24 @@ def home():
 def vision():
     req_id = request.json.get("id")
     image_data = request.json.get("image")
-    
+
     if not req_id or not image_data:
         return jsonify({"error": "Missing 'id' or 'image' in request body"}), 400
-    
+
     return process_image(req_id, image_data)
+
+
+@app.route("/camera_check", methods=["POST"])
+def camera_info():
+    camera_id = request.json.get("id")
+    if not camera_id:
+        return jsonify({"error": "Missing 'id' in request body"}), 400
+    camera = model.cameras[camera_id]
+    if not camera:
+        return jsonify({"error": "Invalid camera ID"}, 400)
+    camera.increase_alert_checks()  # Increase the alert checks
+    return jsonify(camera.give_info().json)
+
 
 @app.route("/test")  # Testing route
 def test():
