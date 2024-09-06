@@ -11,27 +11,19 @@ api_key = os.getenv("OPENAI_API_KEY")
 print(api_key)
 headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
-def process_image(image_data: str = "[No Image Data]") -> jsonify:
+def process_image(image_data: str = "[No Image Data]"):
     try:
         if not image_data or image_data == "[No Image Data]":
-            return jsonify({"error": "No image data provided"}), 400
-        
+            return {"error": "No image data provided"}
+
         payload = {
             "model": "gpt-4o-mini",
             "messages": [
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": f"Detect whether or not you detect an intruder, add the camera ID {id}. Only say YES or NO.",
-                        },
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_data}"
-                            },
-                        },
+                        {"type": "text", "text": "Only say YES, that's it."},
+                        {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
                     ],
                 }
             ],
@@ -44,34 +36,23 @@ def process_image(image_data: str = "[No Image Data]") -> jsonify:
         response_json = response.json()
 
         if 'error' in response_json:
-            return jsonify({
+            return {
                 "error": "OpenAI API Error",
                 "details": response_json['error']
-            }), 500
+            }
 
         if 'choices' not in response_json or not response_json['choices']:
-            return jsonify({
+            return {
                 "error": "Unexpected API response",
                 "details": response_json
-            }), 500
+            }
 
         message = response_json["choices"][0]["message"]["content"]
 
-
-        off_keywords = [
-            "unusual",
-            "off",
-            "weird",
-            "strange",
-            "surreal",
-            "disconnection",
-            "odd",
-        ]
+        off_keywords = ["unusual", "off", "weird", "strange", "surreal", "disconnection", "odd"]
         is_off = any(keyword in message.lower() for keyword in off_keywords)
 
-        return jsonify(
-            {"message": message, "is_off": is_off, "full_response": response_json}
-        ), 200
+        return {"message": message, "is_off": is_off, "full_response": response_json}
 
     except Exception as e:
-        return jsonify({"error": str(e), "traceback": traceback.format_exc()}), 500
+        return {"error": str(e), "traceback": traceback.format_exc()}

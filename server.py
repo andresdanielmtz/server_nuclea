@@ -9,6 +9,10 @@ app = Flask(__name__)
 def home():
     return "Hello \t Welcome to the Drone Security System!"
 
+@app.route("/move_system")
+def move_system():
+    model.step()
+    return jsonify({"message": "System moved"})
 
 @app.route("/set_channel", methods=["POST"])
 def set_channel():
@@ -35,9 +39,42 @@ def vision():
     image_data = request.json.get("image")
 
     if not image_data:
-        return jsonify({"error": "Missing 'id' or 'image' in request body"}), 400
+        return jsonify({"error": "Missing 'image' in request body"}), 400
 
-    return process_image(image_data)
+    # Call process_image and handle the returned dictionary
+    result = process_image(image_data)
+    
+    if "error" in result:
+        return jsonify(result), 500
+    
+    message = result.get("message")
+    if not message:
+        return jsonify({"error": "No result from vision processing"}), 500
+    if message == "YES":
+        model.channel = {"subject": ["vision"], "content": "intruder"}
+    
+    return jsonify({"message": "Vision processing successful", "result": message})
+
+@app.route("/visionFinal", methods=["POST"])
+def visionFinal():
+    image_data = request.json.get("image")
+
+    if not image_data:
+        return jsonify({"error": "Missing 'image' in request body"}), 400
+
+    # Call process_image and handle the returned dictionary
+    result = process_image(image_data)
+    
+    if "error" in result:
+        return jsonify(result), 500
+    
+    message = result.get("message")
+    if not message:
+        return jsonify({"error": "No result from vision processing"}), 500
+    if message == "YES":
+        model.channel = {"subject": ["Drone"], "content": "intruder"}
+    
+    return jsonify({"message": "Vision processing successful", "result": message})
 
 
 @app.route("/vision_result", methods=["POST"])
