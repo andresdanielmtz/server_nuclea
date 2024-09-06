@@ -1,6 +1,7 @@
 import agentpy as ap
 from owlready2 import *
 from flask import jsonify
+import math
 
 
 class SecurityModel(ap.Model):
@@ -31,32 +32,25 @@ class SecurityModel(ap.Model):
 
 
 class Guard(ap.Agent):
-
     def setup(self):
         self.agentType = 1
-        self.alert_checks = 0
         self.actions = [
             self.basic_analysis,
             self.panoramic_analysis,
-            self.final_alert,
-            self.drone_control,
-            self.drone_end_control,
+            self.end_panoramic_analysis,
         ]
         self.rules = [
-            self.rule_basic_check,
-            self.rule_panoramic_check,
-            self.rule_final_alert,
-            self.rule_drone_end_control,
-            self.rule_drone_control,
+            self.rule_basic_analysis,
+            self.rule_panoramic_analysis,
+            self.rule_end_panoramic_analysis,
         ]
-        self.alarmCount_begin = 0
-        self.drone_override = False
-        self.alarmCount_end = 0
-        self.call_the_cops = False
-        self.drone_control_timer = 0
+        self.alarm_count_begin = 0
+        self.alarm_count_end = 0
         self.initialize_panoramic_view = False
+        self.drone_override = False
+        self.drone_override_timer = 0
+        self.alert_checks = 0
         self.important_subjects = ["camera", "drone"]
-        self.check_test = False
 
     def see(self):
         subjects = self.model.channel["subject"]
@@ -69,66 +63,41 @@ class Guard(ap.Agent):
                 elif content == "intruder begin":
                     self.increase_alarm_count_begin()
 
-        self.check_test = True
-        print("Alert checks: ", self.alert_checks)
-
-    def info_receptor(self, message):
-        print(f"Guard received message: {message}")
-
-    def drone_control(self):
-        self.model.drone[0].pos = [0, 50, 0]
-        self.drone_control_timer += 1
-        self.drone_override = True
-
-    def rule_drone_control(self, act):
-        return (
-            self.drone_override == False
-            and self.initialize_panoramic_view == True
-            and self.drone_control_timer < 15
-            and act == self.drone_control
-        )
-
-    def drone_end_control(self):
-        self.model.drone[0].pos = None
-        self.drone_override = False
-        self.initialize_panoramic_view = False
-        self.drone_control_timer = 0
-
-    def rule_drone_end_control(self, act):
-        return (
-            self.drone_override == True
-            and self.drone_control_timer > 15
-            and act == self.drone_end_control
-        )
-
-    def panoramic_analysis(self):
-        self.initialize_panoramic_view = True
-        self.drone_override = True
+        self.alert_checks += 1
 
     def basic_analysis(self):
         self.drone_override = False
         self.initialize_panoramic_view = False
 
-    def rule_basic_check(self, act):
+    def rule_basic_analysis(self, act):
         return self.alert_checks < 3 and act == self.basic_analysis
 
-    def rule_panoramic_check(self, act):
+    def panoramic_analysis(self):
+        self.initialize_panoramic_view = True
+        self.drone_override = True
+        self.drone_override_timer = 0
+
+    def rule_panoramic_analysis(self, act):
         return self.alert_checks >= 3 and act == self.panoramic_analysis
 
-    def final_alert(self):
-        print("Alerta Final")
-        self.call_the_cops = True
-        return
+    def end_panoramic_analysis(self):
+        self.initialize_panoramic_view = False
+        self.drone_override = False
+        self.drone_override_timer = 0
+        self.alert_checks = 0
 
-
-    def rule_final_alert(self, act):
-        return self.alarmCount_end > 0 and act == self.final_alert
+    def rule_end_panoramic_analysis(self, act):
+        return (
+            self.initialize_panoramic_view == True
+            and self.drone_override_timer >= 5  
+            and act == self.end_panoramic_analysis
+        )
 
     def increase_alarm_count_begin(self):
-        self.alarmCount_begin += 1
+        self.alarm_count_begin += 1
 
     def increase_alarm_count_end(self):
-        self.alarmCount_end += 1
+        self.alarm_count_end += 1
 
     def next(self):
         for action in self.actions:
@@ -137,22 +106,24 @@ class Guard(ap.Agent):
                     action()
 
     def step(self):
-        self.see()  # Check the channel
+        self.see()
+        if self.drone_override:
+            self.drone_override_timer += 1
+            if self.drone_override_timer >= 5: 
+                self.drone_override_timer = 0
+                self.drone_override = False
+                self.initialize_panoramic_view = False
         self.next()
 
     def give_info(self):
-        return jsonify(
-            {
-                "countAlarm_begin": self.alarmCount_begin,
-                "countAlarm_end": self.alarmCount_end,
-                "droneOverride": self.drone_override,
-                "callTheCops": self.call_the_cops,
-                "alert_checks": self.alert_checks,
-                "drone_timer": self.drone_control_timer,
-                "initialize_panoramic_view": self.initialize_panoramic_view,
-                "check_test": self.check_test,
-            }
-        )
+        return {
+            "drone_override": self.drone_override,
+            "initialize_panoramic_view": self.initialize_panoramic_view,
+            "drone_override_timer": self.drone_override_timer,
+            "alarm_count_begin": self.alarm_count_begin,
+            "alarm_count_end": self.alarm_count_end,
+            "alert_checks": self.alert_checks,
+        }
 
 
 class Camera(ap.Agent):
@@ -173,7 +144,7 @@ class Camera(ap.Agent):
         for subject in subjects:
             if subject == "drone":
                 if content == "intruder begin":
-                    self.increase_alert_checks() 
+                    self.increase_alert_checks()
         return
 
     def update_vision_result(self, result):
@@ -228,31 +199,61 @@ class Camera(ap.Agent):
 class Drone(ap.Agent):
     def setup(self):
         self.agentType = 3
-        self.actions = [self.alert_guard, self.alert_guard_final]
-        self.rules = [self.rule_alert_guard, self.rule_alert_guard_final]
+        self.actions = [self.alert_guard, self.alert_guard_final, self.move]
+        self.rules = [self.rule_alert_guard, self.rule_alert_guard_final, self.rule_move]
         self.detection = None
-        self.pos = None
+        self.pos = [0, 0, 0]  # Starting position
         self.panoramic = False
+        self.target_pos = None
+        self.override_timer = 0
+        self.radius = 10
+        self.time_counter = 0
+        self.position_history = []
+        self.override_duration = 5  # 15 seconds / 3 seconds per step = 5 steps
 
     def rule_alert_guard(self, action):
-        return (
-            self.detection == "YES"
-            and self.panoramic == False
-            and action == self.alert_guard
-        )
+        return self.detection == "YES" and not self.panoramic and action == self.alert_guard
 
     def rule_alert_guard_final(self, act):
-        return (
-            self.detection == "YES"
-            and self.panoramic == True
-            and act == self.alert_guard_final
-        )
-
-    def alert_guard_final(self):
-        SecurityModel.guard[0].increase_alarm_count_end()
+        return self.detection == "YES" and self.panoramic and act == self.alert_guard_final
 
     def alert_guard(self):
-        SecurityModel.guard[0].increase_alarm_count_begin()
+        self.model.channel = {"subject": ["drone"], "content": "intruder begin"}
+
+    def alert_guard_final(self):
+        self.model.channel = {"subject": ["drone"], "content": "intruder final"}
+        
+    def update_vision_result(self, result):
+        self.detection = result
+    def move(self):
+        if self.model.guard[0].drone_override:
+            if self.target_pos is None:
+                self.target_pos = [0, 0, 40]
+                self.override_timer = 0
+
+            self.override_timer += 1
+            progress = min(self.override_timer / self.override_duration, 1)
+
+            self.pos[0] = self.pos[0] + (self.target_pos[0] - self.pos[0]) * progress
+            self.pos[1] = self.pos[1] + (self.target_pos[1] - self.pos[1]) * progress
+            self.pos[2] = self.pos[2] + (self.target_pos[2] - self.pos[2]) * progress
+
+            if self.override_timer >= self.override_duration:
+                self.model.guard[0].drone_override = False
+                self.target_pos = None
+        else:
+            angle = (self.time_counter * 3 % 360) * (math.pi / 180)
+            self.pos[0] = self.radius * math.cos(angle)
+            self.pos[1] = self.radius * math.sin(angle)
+            self.pos[2] = 0
+
+        # Record the position history
+        self.position_history.append(self.pos.copy())
+        if len(self.position_history) > 10:
+            self.position_history.pop(0)
+
+    def rule_move(self, act):
+        return act == self.move
 
     def next(self):
         for action in self.actions:
@@ -261,9 +262,16 @@ class Drone(ap.Agent):
                     action()
 
     def step(self):
+        self.time_counter += 1
         self.next()
+        self.move()
 
     def give_info(self):
-        return jsonify(
-            {"detection": self.detection, "pos": self.pos, "panoramic": self.panoramic}
-        )
+        return {
+            "position": self.pos,
+            "detection": self.detection,
+            "panoramic": self.panoramic,
+            "position_history": self.position_history,
+            "override_timer": self.override_timer,
+            "time_counter": self.time_counter,
+        }

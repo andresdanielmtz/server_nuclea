@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, Response, request, jsonify
 from agents import SecurityModel
 from util.camera import process_image
 
@@ -54,7 +54,7 @@ def vision_result():
         )
 
     if agent_type == "drone":
-        model.drone[0].update_vision_result(result) 
+        model.drone[0].update_vision_result(result)
         subject = "drone"
     elif agent_type == "camera":
         if not agent_id:
@@ -78,7 +78,7 @@ def camera_info():
     camera = model.cameras[camera_id]
     if not camera:
         return jsonify({"error": "Invalid camera ID"}, 400)
-    camera.increase_alert_checks()  # Increase the alert checks
+    camera.increase_alert_checks()
     return jsonify(camera.give_info().json)
 
 
@@ -96,17 +96,78 @@ def channel():
 
 @app.route("/agents_info")
 def agents_info():
-    guard_info = model.guard[0].give_info().json
-    cameras_info = [camera.give_info().json for camera in model.cameras]
-    drone_info = model.drone[0].give_info().json
-
+    guard_info = model.guard[0].give_info()
+    cameras_info = [camera.give_info() for camera in model.cameras]
+    drone_info = model.drone[0].give_info()
     model.step()
-    return {
-        "channel": model.channel,
-        "guard": guard_info,
-        "cameras": cameras_info,
-        "drone": drone_info,
-    }
+
+    return jsonify(
+        {
+            "channel": model.channel,
+            "guard": (
+                guard_info.get_json()
+                if isinstance(guard_info, Response)
+                else guard_info
+            ),
+            "cameras": [
+                cam.get_json() if isinstance(cam, Response) else cam
+                for cam in cameras_info
+            ],
+            "drone": (
+                drone_info.get_json()
+                if isinstance(drone_info, Response)
+                else drone_info
+            ),
+        }
+    )
+
+
+@app.route("/drone_info", methods=["GET"])
+def get_drone_info():
+    drone = model.drone[0]
+    return jsonify(
+        {
+            "current_position": drone.pos,
+            "detection": drone.detection,
+            "panoramic": drone.panoramic,
+            "time_counter": drone.time_counter,
+            "drone_override": model.guard[0].drone_override,
+        }
+    )
+
+
+@app.route("/guard_info", methods=["GET"])
+def get_guard_info():
+    guard = model.guard[0]
+    return jsonify(
+        {
+            "drone_override": guard.drone_override,
+            "initialize_panoramic_view": guard.initialize_panoramic_view,
+            "drone_override_timer": guard.drone_override_timer,
+        }
+    )
+
+
+@app.route("/trigger_panoramic", methods=["GET"])
+def trigger_panoramic():
+    guard = model.guard[0]
+    guard.panoramic_analysis()
+    return jsonify({"message": "Panoramic analysis triggered"})
+
+
+@app.route("/simulate_steps", methods=["POST"])
+def simulate_steps():
+    steps = request.json.get("steps", 1)
+    for _ in range(steps):
+        model.step()
+    return jsonify({"message": f"Simulated {steps} steps"})
+
+
+@app.route("/reset_simulation", methods=["GET"])
+def reset_simulation():
+    global model
+    model = SecurityModel()
+    return jsonify({"message": "Simulation reset"})
 
 
 if __name__ == "__main__":
