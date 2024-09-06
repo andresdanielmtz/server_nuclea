@@ -22,7 +22,7 @@ def process_image(image_data: str = "[No Image Data]"):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": "Only say YES, that's it."},
+                        {"type": "text", "text": "Analyze the image and if you identify a humanoid red figure, return YES, else if there is no humanoid red figure return NO"},
                         {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}},
                     ],
                 }
