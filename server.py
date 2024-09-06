@@ -2,7 +2,6 @@ from flask import Flask, request, jsonify
 from agents import SecurityModel
 from util.camera import process_image
 
-
 app = Flask(__name__)
 
 
@@ -16,14 +15,12 @@ def set_channel():
     subject = request.json.get("subject")
     if not isinstance(subject, list):
         return jsonify({"error": "Invalid 'subject' type, expected a list"}), 400
-    
+
     content = request.json.get("content")
     if not subject or not content:
         return jsonify({"error": "Missing 'subject' or 'content' in request body"}), 400
     model.channel = {"subject": subject, "content": content}
-    
-    
-    
+
     return jsonify(model.channel)
 
 
@@ -42,6 +39,40 @@ def vision():
         return jsonify({"error": "Missing 'id' or 'image' in request body"}), 400
 
     return process_image(req_id, image_data)
+
+
+@app.route("/vision_result", methods=["POST"])
+def vision_result():
+    agent_type = request.json.get("agent_type")
+    agent_id = request.json.get("id")
+    result = request.json.get("result")
+
+    if not agent_type or not result:
+        return (
+            jsonify({"error": "Missing 'agent_type' or 'result' in request body"}),
+            400,
+        )
+
+    if agent_type == "drone":
+        if not agent_id:
+            return jsonify({"error": "Missing 'id' for drone agent"}), 400
+        model.drone[int(agent_id)].update_vision_result(result)
+        subject = ["drone", agent_id]
+    elif agent_type == "camera":
+        if not agent_id:
+            return jsonify({"error": "Missing 'id' for camera agent"}), 400
+        model.cameras[agent_id].update_vision_result(result)
+        subject = ["camera", agent_id]
+    elif agent_type == "guard":
+        model.guard[0].update_vision_result(result)
+        subject = ["guard"]
+    else:
+        return jsonify({"error": "Invalid agent_type"}), 400
+
+    model.channel = {"subject": subject, "content": result}
+    return jsonify(
+        {"message": "Vision result updated successfully", "channel": model.channel}
+    )
 
 
 @app.route("/camera_check", methods=["POST"])

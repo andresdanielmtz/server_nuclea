@@ -56,7 +56,7 @@ class Guard(ap.Agent):
         self.drone_control_timer = 0
         self.initialize_panoramic_view = False
         self.important_subjects = ["camera", "drone"]
-        self.check_test = False 
+        self.check_test = False
 
     def see(self):
         subjects = self.model.channel["subject"]
@@ -64,14 +64,12 @@ class Guard(ap.Agent):
 
         for subject in subjects:
             if subject in self.important_subjects:
-                if content == "intruder":
-                    self.alert_checks += 1
+                if content == "intruder final":
                     self.increase_alarm_count_end()
                 elif content == "intruder begin":
-                    self.alert_checks += 1
                     self.increase_alarm_count_begin()
-                break  # Stop checking after finding an important subject
-        self.check_test = True 
+
+        self.check_test = True
         print("Alert checks: ", self.alert_checks)
 
     def info_receptor(self, message):
@@ -118,7 +116,7 @@ class Guard(ap.Agent):
         return self.alert_checks >= 3 and act == self.panoramic_analysis
 
     def final_alert(self):
-        print("Alerta Final !!!!!")
+        print("Alerta Final")
         self.call_the_cops = True
         return
 
@@ -168,15 +166,14 @@ class Camera(ap.Agent):
         self.test = ""
 
     def see(self):
-        channel = self.model.channel  # Get the channel
-        for val in channel:
-            if val == "subject":
-                if channel.get(val) != "camera":
-                    return
-            if val == "content":
-                if channel.get(val) != "intruder":
-                    return
-        self.detect_intruder()
+        subjects = self.model.channel["subject"]
+        content = self.model.channel["content"]
+
+        for subject in subjects:
+            if subject == "drone":
+                if content == "intruder begin":
+                    self.increase_alert_checks() 
+        return
 
     def increase_alert_checks(self):
         self.alert_checks += 1
@@ -225,7 +222,6 @@ class Camera(ap.Agent):
 
 
 class Drone(ap.Agent):
-
     def setup(self):
         self.agentType = 3
         self.actions = [self.alert_guard, self.alert_guard_final]
