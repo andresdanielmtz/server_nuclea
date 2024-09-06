@@ -37,6 +37,7 @@ class Guard(ap.Agent):
             self.start_drone_override,
             self.check_drone_detection,
             self.stop_controlling_drone,
+            self.action_call_cops,
         ]
         self.rules = [
             self.rule_basic_analysis,
@@ -45,15 +46,17 @@ class Guard(ap.Agent):
             self.rule_start_drone_override,
             self.rule_check_drone_detection,
             self.rule_stop_controlling_drone,
+            self.rule_action_call_cops,
         ]
         self.alarm_count_begin = 0
         self.alarm_count_end = 0
         self.initialize_panoramic_view = False
         self.drone_override = False
         self.drone_override_timer = 0
+        self.call_cops = False
         self.alert_checks = 0
         self.important_subjects = ["camera", "drone"]
-        self.personal_time = 10  # 10 steps for when he controls the drone
+        self.personal_time = 30  # 10 steps for when he controls the drone
 
     def see(self):
         if self.alarm_count_end >= 1:
@@ -67,11 +70,17 @@ class Guard(ap.Agent):
             self.model.channel = {"subject": [""], "content": ""}
         if subjects == ["Drone"] and content == "intruder":
             self.alarm_count_end += 1
-            self.model.channel = {"subject": [""], "content": ""}
 
     def basic_analysis(self):
         self.drone_override = False
         self.initialize_panoramic_view = False
+
+    def rule_action_call_cops(self,act):
+        if self.personal_time == 3:
+            return act==self.action_call_cops
+
+    def action_call_cops(self):
+        self.call_cops = True
 
     def rule_basic_analysis(self, act):
         return self.alarm_count_begin < 3 and act == self.basic_analysis
@@ -121,12 +130,14 @@ class Guard(ap.Agent):
     def stop_controlling_drone(self):
         self.drone_override = False
         self.initialize_panoramic_view = False
-        self.personal_time = 10
+        self.personal_time = 30
         self.alarm_count_begin = 0
         self.alarm_count_end = 0
 
     def rule_stop_controlling_drone(self, act):
         return self.personal_time <= 0 and act == self.stop_controlling_drone
+
+
 
     def step(self):
         self.see()
@@ -155,6 +166,7 @@ class Guard(ap.Agent):
             "alarm_count_end": self.alarm_count_end,
             "alert_checks": self.alert_checks,
             "personal_time": self.personal_time,
+            "call_cops": self.call_cops,
         }
 
 
@@ -185,10 +197,6 @@ class Camera(ap.Agent):
             and self.model.channel["content"].get("id") == self.id
         ):
             self.detection = self.model.channel["content"].get("result")
-            self.model.channel = {
-                "subject": [""],
-                "content": "",
-            }  # Clear the channel after reading
 
     def rule_update_vision_result(self, act):
         return act == self.update_vision_result
@@ -251,7 +259,7 @@ class Drone(ap.Agent):
         self.radius = 10
         self.time_counter = 0
         self.position_history = []
-        self.override_duration = 5  # 15 seconds / 3 seconds per step = 5 steps
+        self.override_duration = 20  # 15 seconds / 3 seconds per step = 5 steps
         self.guard_override = False
 
     def rule_alert_guard(self, action):
@@ -263,7 +271,7 @@ class Drone(ap.Agent):
 
     def rule_alert_guard_final(self, act):
         return (
-            self.detection == "YES" and self.panoramic and act == self.alert_guard_final
+            self.detection == "YES" and act == self.alert_guard_final
         )
 
     def alert_guard(self):
@@ -272,73 +280,55 @@ class Drone(ap.Agent):
     def alert_guard_final(self):
         self.model.channel = {"subject": ["Drone"], "content": "intruder"}
 
-    def update_vision_result(self, result):
-        self.detection = result
-
     def move(self):
-
-        if self.model.guard[0].drone_override:
+        if self.guard_override:  # Move to the center if guard_override is True
             if self.target_pos is None:
-                self.target_pos = [
-                    0,
-                    40,
-                    0,
-                ]  # Set target position (includes Y for altitude in Unity)
+                self.target_pos = [0, 40, 0]  # Move to the center
                 self.override_timer = 0
 
             self.override_timer += 1
             progress = min(self.override_timer / self.override_duration, 1)
 
-            # Move towards the target position based on the progress
+            # Move towards the target position
             self.pos[0] = self.pos[0] + (self.target_pos[0] - self.pos[0]) * progress
-            self.pos[1] = (
-                self.pos[1] + (self.target_pos[1] - self.pos[1]) * progress
-            )  # Y is height in Unity
+            self.pos[1] = self.pos[1] + (self.target_pos[1] - self.pos[1]) * progress
             self.pos[2] = self.pos[2] + (self.target_pos[2] - self.pos[2]) * progress
 
             # Reset override after reaching the target
             if self.override_timer >= self.override_duration:
-                self.model.guard[0].drone_override = False
+                self.guard_override = False
                 self.target_pos = None
 
-        # Normal patrol movement (not being overridden)
-        else:
-            # Define a rectangular patrol route (4 waypoints) in the X-Z plane, with a fixed Y (height)
+        else:  # Patrol movement
             waypoints = [
-                [-50, 40, -50],  # Corner 1 (lower-left, with Y = 150 for height)
-                [50, 40, -50],  # Corner 2 (lower-right)
-                [50, 40, 50],  # Corner 3 (upper-right)
-                [-50, 40, 50],  # Corner 4 (upper-left)
+                [-50, 40, -50],  # Corner 1
+                [50, 40, -50],  # Corner 2
+                [50, 40, 50],  # Corner 3
+                [-50, 40, 50],  # Corner 4
             ]
-
-            # Determine which waypoint to go to based on time_counter
-            segment_time = 100  # Adjust this value to control speed (how long it takes to go between two waypoints)
+            segment_time = 100
             total_time = len(waypoints) * segment_time
             current_time_in_route = self.time_counter % total_time
 
-            # Calculate which segment of the rectangle the drone is currently on
+            # Segment the route and progress between waypoints
             segment_index = current_time_in_route // segment_time
             next_segment_index = (segment_index + 1) % len(waypoints)
-
-            # Get current and next waypoints
             current_waypoint = waypoints[segment_index]
             next_waypoint = waypoints[next_segment_index]
 
-            # Calculate progress between the two waypoints
+            # Move between waypoints
             progress_in_segment = (current_time_in_route % segment_time) / segment_time
-
-            # Move the drone between the waypoints based on progress
             self.pos[0] = (
                 current_waypoint[0]
                 + (next_waypoint[0] - current_waypoint[0]) * progress_in_segment
             )
-            self.pos[1] = current_waypoint[1]  # Keep Y (height) constant at 150
+            self.pos[1] = current_waypoint[1]
             self.pos[2] = (
                 current_waypoint[2]
                 + (next_waypoint[2] - current_waypoint[2]) * progress_in_segment
             )
 
-        # Record the position history
+        # Update position history
         self.position_history.append(self.pos.copy())
         if len(self.position_history) > 10:
             self.position_history.pop(0)
@@ -346,29 +336,19 @@ class Drone(ap.Agent):
     def rule_move(self, act):
         return act == self.move
 
-    def check_guard_orders(self):
-        if (
-            self.model.channel["subject"] == ["Guard"]
-            and self.model.channel["content"] == "drone_override"
-        ):
-            self.guard_override = True
-            self.model.channel = {
-                "subject": [""],
-                "content": "",
-            }  # Clear the channel after reading
-
     def rule_check_guard_orders(self, act):
         return act == self.check_guard_orders
 
-    def next(self):
-        for action in self.actions:
-            for rule in self.rules:
-                if rule(action):
-                    action()
+    def check_guard_orders(self):
+        if (
+            self.model.guard[0].drone_override == True
+        ):
+            self.guard_override = True
+
 
     def step(self):
         self.time_counter += 1
-        self.next()
+        self.check_guard_orders()
         self.move()
 
     def give_info(self):
